@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+
+# secrets — never commit
+.env
+.env.local
+.env.*.local
+server/.env
+client/.env
+google-oauth-tokens.json
+*.token.json

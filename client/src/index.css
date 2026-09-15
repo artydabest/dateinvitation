@@ -1,0 +1,289 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────
+   Design system — handmade stationery / scrapbook editorial
+   ───────────────────────────────────────────────────────────── */
+
+@layer base {
+  :root {
+    --paper-edge: #e9dfd0;
+    --ink-soft: rgba(67, 53, 40, 0.72);
+    --tape: rgba(246, 215, 221, 0.75);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-cream text-ink font-body antialiased;
+    background-image:
+      radial-gradient(rgba(67, 53, 40, 0.045) 1px, transparent 1.2px),
+      radial-gradient(rgba(188, 214, 234, 0.1) 1px, transparent 1.4px);
+    background-size:
+      23px 23px,
+      37px 37px;
+    background-position:
+      0 0,
+      11px 13px;
+    overflow-x: hidden;
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background: rgba(246, 215, 221, 0.9);
+    color: #433528;
+  }
+
+  /* One consistent, visible focus ring everywhere. */
+  :focus-visible {
+    outline: 2.5px dashed #c8102e;
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  /* Paper card with imperfect edges */
+  .paper-card {
+    @apply relative bg-paper text-ink;
+    border-radius: 6px 10px 7px 11px / 11px 7px 12px 8px;
+    box-shadow:
+      0 1px 2px rgba(67, 53, 40, 0.06),
+      0 8px 24px rgba(67, 53, 40, 0.08);
+    border: 1px solid rgba(67, 53, 40, 0.08);
+  }
+
+  .paper-card--ruled {
+    background-image: repeating-linear-gradient(
+      transparent,
+      transparent 27px,
+      rgba(122, 148, 113, 0.18) 28px
+    );
+  }
+
+  /* Masking tape strip */
+  .tape {
+    position: absolute;
+    width: 88px;
+    height: 26px;
+    background:
+      linear-gradient(
+        100deg,
+        rgba(255, 255, 255, 0.35),
+        rgba(255, 255, 255, 0)
+      ),
+      var(--tape, rgba(246, 215, 221, 0.75));
+    opacity: 0.9;
+    box-shadow: 0 1px 2px rgba(67, 53, 40, 0.1);
+    clip-path: polygon(
+      2% 0%,
+      98% 4%,
+      100% 92%,
+      96% 100%,
+      3% 96%,
+      0% 10%
+    );
+  }
+
+  .tape--powder {
+    background:
+      linear-gradient(100deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0)),
+      rgba(188, 214, 234, 0.7);
+  }
+
+  .tape--custard {
+    background:
+      linear-gradient(100deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0)),
+      rgba(247, 215, 116, 0.65);
+  }
+
+  /* Polaroid frame */
+  .polaroid {
+    @apply bg-white p-3 pb-12;
+    border-radius: 3px;
+    box-shadow:
+      0 1px 2px rgba(67, 53, 40, 0.1),
+      0 10px 26px rgba(67, 53, 40, 0.12);
+  }
+
+  /* Handwritten annotations */
+  .hand {
+    @apply font-hand text-cocoa;
+    letter-spacing: 0.01em;
+  }
+
+  /* ── the real calendar ── */
+  .cal-nav {
+    @apply inline-flex h-11 w-11 items-center justify-center rounded-full text-2xl font-semibold text-cocoa transition-all;
+    border: 1.5px dashed rgba(107, 87, 68, 0.35);
+  }
+  .cal-nav:hover:not(:disabled) {
+    @apply bg-blush/50 text-cherry;
+    border-color: rgba(200, 16, 46, 0.4);
+  }
+  .cal-nav:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .cal-day {
+    @apply relative flex aspect-square items-center justify-center rounded-md font-body text-[15px] font-semibold transition-all;
+    min-height: 40px;
+  }
+  .cal-day:not(.cal-day--selected):not(.cal-day--disabled):hover {
+    @apply bg-blush text-ink;
+  }
+  .cal-day--selected {
+    @apply scale-110 bg-cherry text-white;
+    box-shadow: 0 4px 12px rgba(200, 16, 46, 0.35);
+  }
+  .cal-day--today:not(.cal-day--selected) {
+    @apply bg-blush/45 text-ink;
+    outline: 1.5px dashed rgba(200, 16, 46, 0.4);
+    outline-offset: -3px;
+  }
+  .cal-day--disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* custom time selects */
+  .time-select {
+    @apply rounded-md border bg-paper px-2 py-1.5 font-body text-[15px] font-semibold text-ink;
+    border-color: rgba(107, 87, 68, 0.35);
+  }
+  .time-select:focus-visible {
+    outline: 2.5px dashed #c8102e;
+    outline-offset: 2px;
+  }
+  .ampm {
+    @apply px-3 py-1.5 text-sm font-semibold text-cocoa transition-colors;
+    min-height: 36px;
+  }
+  .ampm--on {
+    @apply bg-cherry text-white;
+  }
+
+  /* ── the bouquet, pinned into the top-right corner (desktop layout) ── */
+  .bq-corner {
+    @apply fixed right-2 top-2 z-30 sm:right-6 sm:top-5;
+    transform: rotate(2deg);
+  }
+  .bq-wrap {
+    background: linear-gradient(160deg, #f6d7dd 0%, #f3c4cd 55%, #e9aebc 100%);
+    clip-path: polygon(50% 100%, 0 0, 100% 0);
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(67, 53, 40, 0.15);
+    opacity: 0.95;
+  }
+
+  /* ── the garden screen ── */
+  .garden-screen {
+    overflow: hidden;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3
+      font-semibold text-base transition-all duration-200 select-none
+      active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none;
+    min-height: 48px; /* comfortable tap target */
+    border: 1.5px solid transparent;
+  }
+
+  .btn-cherry {
+    @apply btn bg-cherry text-white;
+    box-shadow: 0 3px 0 #96071f;
+  }
+  .btn-cherry:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 5px 0 #96071f;
+  }
+  .btn-cherry:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 0 #96071f;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-cocoa;
+    border-color: rgba(107, 87, 68, 0.35);
+  }
+  .btn-ghost:hover {
+    @apply bg-blush/40;
+    border-color: rgba(107, 87, 68, 0.55);
+  }
+
+  .btn-powder {
+    @apply btn bg-powder text-ink;
+    box-shadow: 0 3px 0 #7ba6c7;
+  }
+  .btn-powder:hover {
+    transform: translateY(-1px);
+  }
+
+  /* Sticker chip */
+  .sticker {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold;
+    border: 1.5px dashed rgba(67, 53, 40, 0.25);
+    background: rgba(255, 253, 248, 0.85);
+  }
+
+  /* Screen sections */
+  .screen {
+    @apply relative mx-auto flex w-full max-w-xl flex-col items-center
+      px-5 py-14 sm:py-20;
+    min-height: 100dvh;
+    justify-content: center;
+    gap: 1.75rem;
+  }
+
+  /* Dense variant for tall stacked screens — keeps everything reachable */
+  .screen--dense {
+    @apply gap-3 py-8;
+  }
+
+  /* Compact time chip border width helper */
+  .border-1\.5 {
+    border-width: 1.5px;
+  }
+}
+
+@layer utilities {
+  /* Slightly rotated scrapbook pieces */
+  .tilt-1 { transform: rotate(-1.6deg); }
+  .tilt-2 { transform: rotate(1.2deg); }
+  .tilt-3 { transform: rotate(-0.8deg); }
+  .tilt-4 { transform: rotate(2.1deg); }
+
+  .text-balance { text-wrap: balance; }
+
+  /* Grain overlay */
+  .grain::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 60;
+    opacity: 0.5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.04'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Hide scrollbar for chip rails */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+}
+
+/* ── Respect reduced motion everywhere ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
