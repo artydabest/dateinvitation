@@ -101,11 +101,6 @@ function drawCentered(
   page.drawText(text, { x: (PAGE_W - width) / 2, y, size, font, color });
 }
 
-/** Width of a centered string, for placing doodles next to it. */
-function centeredWidth(font: PDFFont, text: string, size: number): number {
-  return font.widthOfTextAtSize(text, size);
-}
-
 /** Faux letter-spaced small label: "T H E   D A Y". */
 function spaced(text: string): string {
   return text
@@ -140,20 +135,6 @@ function drawDashedFrame(page: PDFPage, m: number) {
   drawDashedLine(page, { x: x2, y: y1 }, { x: x2, y: y2 });
   drawDashedLine(page, { x: x2, y: y2 }, { x: x1, y: y2 });
   drawDashedLine(page, { x: x1, y: y2 }, { x: x1, y: y1 });
-}
-
-/** A tiny hand-drawn-style heart: two circles + a rotated square. */
-function drawHeart(page: PDFPage, cx: number, cy: number, s: number) {
-  page.drawCircle({ x: cx - s * 0.45, y: cy + s * 0.3, size: s * 0.52, color: C.blushdeep });
-  page.drawCircle({ x: cx + s * 0.45, y: cy + s * 0.3, size: s * 0.52, color: C.blushdeep });
-  page.drawRectangle({
-    x: cx - s * 0.5,
-    y: cy - s * 0.72,
-    width: s,
-    height: s,
-    rotate: degrees(45),
-    color: C.blushdeep,
-  });
 }
 
 /** Soft tinted panel behind a section. */
@@ -303,7 +284,7 @@ export async function buildInvitationPdf(
 
   /* ── Her bouquet — the flowers she picked, fanned and tied ── */
   if (input.pickedFlowers.length > 0) {
-    drawCentered(page, spaced("her bouquet"), body, 7.5, y - 6, C.cocoa);
+    drawCentered(page, spaced("your bouquet"), body, 7.5, y - 6, C.cocoa);
 
     // embed one image per distinct flower type she picked (best effort)
     const types = [...new Set(input.pickedFlowers.map((f) => f.type))].filter(
@@ -360,10 +341,7 @@ export async function buildInvitationPdf(
     y = baseY - 34;
   }
 
-  /* ── Closing ── */
-  drawCentered(page, "the first of many", italic, 15, y - 8, C.cherry);
-  const manyW = centeredWidth(italic, "the first of many", 15);
-  drawHeart(page, PAGE_W / 2 + manyW / 2 + 14, y - 2, 7);
+  /* ── Footer ── */
   drawCentered(
     page,
     "P.S. i ain't splitting the bill, just so you know.",
@@ -372,6 +350,9 @@ export async function buildInvitationPdf(
     46,
     C.cocoa,
   );
+
+  /* ── Folio — like a page number, out in the margin below the frame ── */
+  drawCentered(page, "— the first of many —", italic, 8.5, 22, C.cocoa);
 
   return doc.save();
 }
