@@ -96,6 +96,7 @@ export function useInvitationFlow() {
           selectedDate: selectedDate!,
           selectedTime: selectedTime!,
           activityId: selectedActivityId,
+          pickedFlowers,
           requestCalendar: opts.requestCalendar,
           requestEmail: opts.requestEmail,
         };
@@ -112,7 +113,7 @@ export function useInvitationFlow() {
         setSubmitting(false);
       }
     },
-    [selectedDate, selectedTime, selectedActivityId, validSelection],
+    [selectedDate, selectedTime, selectedActivityId, pickedFlowers, validSelection],
   );
 
   return {

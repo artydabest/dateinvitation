@@ -97,6 +97,7 @@ export function FinalScreen({
 
   const calendarHref = result?.calendarLink ?? null;
   const icsHref = result?.icsUrl ?? null;
+  const pdfHref = result?.pdfUrl ?? null;
   const whatsappHref =
     FEATURES.whatsapp && WHATSAPP.phone
       ? `https://wa.me/${WHATSAPP.phone}?text=${encodeURIComponent(WHATSAPP.message)}`
@@ -166,8 +167,13 @@ export function FinalScreen({
               {COPY.final.calendar}
             </a>
           )}
+          {FEATURES.pdfDownload && pdfHref && (
+            <a className="btn-powder" href={pdfHref} download>
+              {COPY.final.pdf}
+            </a>
+          )}
           {FEATURES.icsDownload && icsHref && (
-            <a className="btn-powder" href={icsHref} download>
+            <a className="btn-ghost" href={icsHref} download>
               {COPY.final.ics}
             </a>
           )}

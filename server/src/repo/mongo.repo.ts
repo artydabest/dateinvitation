@@ -3,6 +3,7 @@ import type {
   CalendarStatus,
   EmailStatus,
   InvitationStatus,
+  PickedFlowerDTO,
 } from "../../../shared/invitation.types.js";
 import type {
   InvitationRecord,
@@ -22,6 +23,7 @@ interface InvitationDocSchema {
   selectedDate: string;
   selectedTime: string;
   activityId: string | null;
+  pickedFlowers: PickedFlowerDTO[];
   status: InvitationStatus;
   inviteeName: string;
   inviterName: string;
@@ -38,6 +40,18 @@ const InvitationSchema = new Schema<InvitationDocSchema>(
     selectedDate: { type: String, required: true }, // "YYYY-MM-DD"
     selectedTime: { type: String, required: true }, // "HH:mm"
     activityId: { type: String, default: null },
+    pickedFlowers: {
+      type: [
+        new Schema<PickedFlowerDTO>(
+          {
+            id: { type: String, required: true },
+            type: { type: String, required: true },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     status: {
       type: String,
       enum: StatusSchemaValues,
@@ -73,7 +87,10 @@ export class MongoInvitationRepository implements InvitationRepository {
   }
 
   async create(
-    input: Pick<InvitationRecord, "selectedDate" | "selectedTime" | "activityId"> & {
+    input: Pick<
+      InvitationRecord,
+      "selectedDate" | "selectedTime" | "activityId" | "pickedFlowers"
+    > & {
       inviteeName: string;
       inviterName: string;
     },
@@ -118,6 +135,7 @@ function toRecord(doc: unknown): InvitationRecord {
     selectedDate: string;
     selectedTime: string;
     activityId: string | null;
+    pickedFlowers?: PickedFlowerDTO[] | null;
     status: InvitationStatus;
     inviteeName: string;
     inviterName: string;
@@ -132,6 +150,10 @@ function toRecord(doc: unknown): InvitationRecord {
     selectedDate: d.selectedDate,
     selectedTime: d.selectedTime,
     activityId: d.activityId ?? null,
+    pickedFlowers: (d.pickedFlowers ?? []).map((f) => ({
+      id: f.id,
+      type: f.type,
+    })),
     status: d.status,
     inviteeName: d.inviteeName,
     inviterName: d.inviterName,

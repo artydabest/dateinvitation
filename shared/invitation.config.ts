@@ -295,6 +295,7 @@ export const COPY = {
     ps: "P.S. (I ain't splitting the bill, just so you know.)",
     activityNote: "this is just the main activity — i make the rest of the plan 😌",
     calendar: "add to google calendar 📅",
+    pdf: "keep the invitation forever 💌 (pdf)",
     ics: "download calendar file 🗓",
     whatsapp: `message ${INVITER_NAME} 💌`,
   },
@@ -358,6 +359,8 @@ export const FEATURES = {
   googleCalendarLink: true,
   /** .ics file download fallback. */
   icsDownload: true,
+  /** Keepsake invitation PDF download. */
+  pdfDownload: true,
   /** WhatsApp button on the final screen. */
   whatsapp: true,
   /** Confirmation email via the configured provider. */

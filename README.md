@@ -187,6 +187,7 @@ npm start            # serves API + static client from :4000
 | GET | `/api/health` | status: db driver, email provider, google state |
 | POST | `/api/invitation` | create RSVP (validates against config) |
 | GET | `/api/invitation/:id/ics` | download the `.ics` file |
+| GET | `/api/invitation/:id/pdf` | download the keepsake invitation PDF |
 | GET | `/api/google/status` | `{ configured, authorized }` |
 | GET | `/api/google/auth` | start Roshan's one-time OAuth consent |
 | GET | `/api/google/callback` | OAuth callback (stores refresh token) |

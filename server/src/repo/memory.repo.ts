@@ -11,7 +11,10 @@ export class MemoryInvitationRepository implements InvitationRepository {
   }
 
   async create(
-    input: Pick<InvitationRecord, "selectedDate" | "selectedTime" | "activityId"> & {
+    input: Pick<
+      InvitationRecord,
+      "selectedDate" | "selectedTime" | "activityId" | "pickedFlowers"
+    > & {
       inviteeName: string;
       inviterName: string;
     },
@@ -22,6 +25,7 @@ export class MemoryInvitationRepository implements InvitationRepository {
       id: `mem_${now.getTime().toString(36)}_${this.seq}`,
       ...input,
       activityId: input.activityId ?? null,
+      pickedFlowers: input.pickedFlowers ?? [],
       status: "pending",
       calendarEventId: null,
       calendarStatus: "not_requested",

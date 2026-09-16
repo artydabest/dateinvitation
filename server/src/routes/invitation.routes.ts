@@ -6,6 +6,7 @@ import {
   EMAIL,
   EVENT_DURATION_MINUTES,
   FEATURES,
+  FLOWER_TYPES,
   INVITEE_NAME,
   INVITER_NAME,
 } from "../../../shared/invitation.config.js";
@@ -14,6 +15,7 @@ import type {
   CreateInvitationInput,
   CreateInvitationResponse,
   DateInvitationDTO,
+  PickedFlowerDTO,
 } from "../../../shared/invitation.types.js";
 import type { InvitationRepository } from "../repo/index.js";
 import {
@@ -26,6 +28,7 @@ import {
   pushEventToCalendar,
 } from "../services/googleCalendar.service.js";
 import { sendEmail } from "../services/email.service.js";
+import { buildInvitationPdf } from "../services/invitationPdf.service.js";
 import {
   composeDate,
   formatPretty,
@@ -72,6 +75,25 @@ export function invitationRouter(repo: InvitationRepository): Router {
         ? ACTIVITY_OPTIONS.find((a) => a.id === activityId) ?? null
         : null;
 
+      // ── Picked flowers: optional; keep only real types, cap at 12, dedupe by id. ──
+      const rawFlowers = Array.isArray(body.pickedFlowers) ? body.pickedFlowers : [];
+      const seenFlowerIds = new Set<string>();
+      const pickedFlowers: PickedFlowerDTO[] = [];
+      for (const f of rawFlowers) {
+        if (
+          pickedFlowers.length >= 12 ||
+          !f ||
+          typeof f.id !== "string" ||
+          typeof f.type !== "string" ||
+          !(f.type in FLOWER_TYPES) ||
+          seenFlowerIds.has(f.id)
+        ) {
+          continue;
+        }
+        seenFlowerIds.add(f.id);
+        pickedFlowers.push({ id: f.id, type: f.type });
+      }
+
       const requestCalendar = body.requestCalendar === true;
       const requestEmail = body.requestEmail === true;
 
@@ -79,6 +101,7 @@ export function invitationRouter(repo: InvitationRepository): Router {
         selectedDate,
         selectedTime,
         activityId,
+        pickedFlowers,
         inviteeName: INVITEE_NAME,
         inviterName: INVITER_NAME,
       });
@@ -166,6 +189,7 @@ export function invitationRouter(repo: InvitationRepository): Router {
           updatedAt: updated.updatedAt.toISOString(),
           calendarLink,
           icsUrl: FEATURES.icsDownload ? `/api/invitation/${updated.id}/ics` : null,
+          pdfUrl: FEATURES.pdfDownload ? `/api/invitation/${updated.id}/pdf` : null,
         },
       };
       res.status(201).json(payload);
@@ -206,6 +230,41 @@ export function invitationRouter(repo: InvitationRepository): Router {
       `attachment; filename="date-with-roshan.ics"`,
     );
     res.send(ics);
+  });
+
+  /** Keepsake PDF download for a stored invitation. */
+  router.get("/:id/pdf", (req: Request, res: Response) => {
+    const id = req.params.id ?? "";
+    void repo
+      .findById(id)
+      .then(async (invitation) => {
+        if (!invitation) {
+          res.status(404).send("Not found");
+          return;
+        }
+        const pdfActivity = invitation.activityId
+          ? ACTIVITY_OPTIONS.find((a) => a.id === invitation.activityId) ?? null
+          : null;
+        const pdf = await buildInvitationPdf({
+          datePretty: formatPretty(invitation.selectedDate),
+          timePretty: formatTimePretty(invitation.selectedTime),
+          activityName: pdfActivity?.name ?? null,
+          activityPlace: pdfActivity?.place ?? null,
+          pickedFlowers: invitation.pickedFlowers,
+        });
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="sakshi-and-roshan-invitation.pdf"`,
+        );
+        res.send(Buffer.from(pdf));
+      })
+      .catch((err) => {
+        console.error("[invitation] pdf error:", err);
+        if (!res.headersSent) {
+          res.status(500).send("Could not build the invitation PDF.");
+        }
+      });
   });
 
   return router;

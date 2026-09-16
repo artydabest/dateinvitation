@@ -20,6 +20,12 @@ export type EmailStatus =
   | "skipped"
   | "no_recipient";
 
+/** A flower she picked from the garden, by id + type. */
+export interface PickedFlowerDTO {
+  id: string;
+  type: string; // key of FLOWER_TYPES
+}
+
 export interface DateInvitationDTO {
   id: string;
   selectedDate: string; // "YYYY-MM-DD" — the real date she picked
@@ -36,6 +42,8 @@ export interface DateInvitationDTO {
   calendarLink: string | null;
   /** Download URL for the generated .ics file. */
   icsUrl: string | null;
+  /** Download URL for the keepsake invitation PDF. */
+  pdfUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -46,6 +54,8 @@ export interface CreateInvitationInput {
   selectedTime: string; // "HH:mm" — any real clock time
   /** Optional main activity (id from ACTIVITY_OPTIONS). */
   activityId?: string | null;
+  /** Flowers she picked from the garden (order preserved, max 12 kept). */
+  pickedFlowers?: PickedFlowerDTO[];
   /** Toggles the two external actions, so the client decides what it offered. */
   requestCalendar: boolean;
   requestEmail: boolean;
