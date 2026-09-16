@@ -18,9 +18,20 @@ import {
   type PDFImage,
   type PDFPage,
 } from "pdf-lib";
+import crypto from "node:crypto";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { serverRoot } from "../paths.js";
+import { env } from "../env.js";
+import {
+  ACTIVITY_OPTIONS,
+} from "../../../shared/invitation.config.js";
+import {
+  formatPretty,
+  formatTimePretty,
+  isValidDateString,
+  isValidTimeString,
+} from "../utils/time.js";
 
 /* ── The site palette (mirrors client/tailwind.config.cjs) ── */
 const C = {
@@ -66,6 +77,83 @@ export interface KeepsakeInput {
   activityPlace: string | null;
   /** Flowers she picked in the garden — drawn as her bouquet. */
   pickedFlowers: { id: string; type: string }[];
+}
+
+/* ══════════════ Stateless signed links (no database needed) ══════════════
+ * The RSVP store is in-memory on Render's free tier, so stored invitations
+ * vanish on restart — and a DB-backed PDF link would 404 after any deploy.
+ * Instead the link itself carries the full card state, HMAC-signed so it
+ * can't be forged or tampered with. The PDF regenerates on every request.
+ * ════════════════════════════════════════════════════════════════════ */
+
+/** Compact URL-safe token: "d{date}t{time}a{activity}f{types}|sig". */
+export function buildPdfToken(
+  input: Pick<KeepsakeInput, "datePretty" | "timePretty"> & {
+    selectedDate: string;
+    selectedTime: string;
+    activityId: string | null;
+    pickedFlowers: { id: string; type: string }[];
+  },
+): string {
+  const types = input.pickedFlowers.map((f) => f.type);
+  const payload = [
+    input.selectedDate,
+    input.selectedTime,
+    input.activityId ?? "-",
+    types.join(","),
+  ].join("~");
+  const sig = crypto
+    .createHmac("sha256", env.pdfLinkSecret)
+    .update(payload)
+    .digest("base64url")
+    .slice(0, 24);
+  return `${Buffer.from(payload).toString("base64url")}.${sig}`;
+}
+
+/** Verify a token and rebuild the card input; null if tampered/invalid. */
+export async function parsePdfToken(
+  token: string,
+): Promise<KeepsakeInput | null> {
+  const [payloadB64 = "", sig = ""] = token.split(".");
+  if (!payloadB64 || !sig) return null;
+  let payload: string;
+  try {
+    payload = Buffer.from(payloadB64, "base64url").toString("utf8");
+    const expected = crypto
+      .createHmac("sha256", env.pdfLinkSecret)
+      .update(payload)
+      .digest("base64url")
+      .slice(0, 24);
+    if (
+      sig.length !== expected.length ||
+      !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+    ) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  const [selectedDate = "", selectedTime = "", activityId = "", flowerTypes = ""] =
+    payload.split("~");
+  if (!isValidDateString(selectedDate) || !isValidTimeString(selectedTime)) {
+    return null;
+  }
+
+  const activity =
+    activityId !== "-"
+      ? ACTIVITY_OPTIONS.find((a) => a.id === activityId) ?? null
+      : null;
+  const types = flowerTypes ? flowerTypes.split(",").filter((t) => t in FLOWER_FILES) : [];
+
+  return {
+    datePretty: formatPretty(selectedDate),
+    timePretty: formatTimePretty(selectedTime),
+    activityName: activity?.name ?? null,
+    activityPlace: activity?.place ?? null,
+    // ids are irrelevant to the drawing; give each type a stable pseudo-id
+    pickedFlowers: types.map((type, i) => ({ id: `t${i}`, type })),
+  };
 }
 
 /** Resolve a file inside client/public (assets live there in dev + prod). */

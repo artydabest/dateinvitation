@@ -28,7 +28,11 @@ import {
   pushEventToCalendar,
 } from "../services/googleCalendar.service.js";
 import { sendEmail } from "../services/email.service.js";
-import { buildInvitationPdf } from "../services/invitationPdf.service.js";
+import {
+  buildInvitationPdf,
+  buildPdfToken,
+  parsePdfToken,
+} from "../services/invitationPdf.service.js";
 import {
   composeDate,
   formatPretty,
@@ -147,7 +151,8 @@ export function invitationRouter(repo: InvitationRepository): Router {
         calendarLink = buildGoogleCalendarTemplateUrl(event);
       }
 
-      // ── Email: best-effort, honest status recorded. ──
+      // ── Email: best-effort, honest status recorded. The keepsake PDF is
+      // attached so she gets the invitation even if she loses the tab. ──
       let emailStatus: DateInvitationDTO["emailStatus"] = "skipped";
       if (FEATURES.email && requestEmail) {
         const body = EMAIL.buildBody(
@@ -155,11 +160,23 @@ export function invitationRouter(repo: InvitationRepository): Router {
           formatTimePretty(selectedTime),
           activity?.name ?? null,
         );
+        const buildAttachment = () =>
+          buildInvitationPdf({
+            datePretty: formatPretty(selectedDate),
+            timePretty: formatTimePretty(selectedTime),
+            activityName: activity?.name ?? null,
+            activityPlace: activity?.place ?? null,
+            pickedFlowers,
+          }).then((bytes) => ({
+            filename: "sakshi-and-roshan-invitation.pdf",
+            content: Buffer.from(bytes),
+          }));
         if (EMAIL.notifyEmail) {
           const r1 = await sendEmail({
             to: EMAIL.notifyEmail,
             subject: EMAIL.subject,
             text: body,
+            attachments: [await buildAttachment()],
           });
           emailStatus = r1.ok ? "sent" : "failed";
         } else {
@@ -170,6 +187,7 @@ export function invitationRouter(repo: InvitationRepository): Router {
             to: EMAIL.inviteeEmail,
             subject: EMAIL.subject,
             text: `psst ${INVITEE_NAME}… it's official 🌻\n\n${formatPretty(selectedDate)} · ${formatTimePretty(selectedTime)}${activity ? `\nmain activity: ${activity.name}` : ""}\n\nsee you then 💗`,
+            attachments: [await buildAttachment()],
           });
         }
       }
@@ -188,8 +206,17 @@ export function invitationRouter(repo: InvitationRepository): Router {
           createdAt: updated.createdAt.toISOString(),
           updatedAt: updated.updatedAt.toISOString(),
           calendarLink,
-          icsUrl: FEATURES.icsDownload ? `/api/invitation/${updated.id}/ics` : null,
-          pdfUrl: FEATURES.pdfDownload ? `/api/invitation/${updated.id}/pdf` : null,
+          icsUrl: null,
+          pdfUrl: FEATURES.pdfDownload
+            ? `/api/invitation/pdf/${buildPdfToken({
+                selectedDate,
+                selectedTime,
+                activityId,
+                pickedFlowers,
+                datePretty: formatPretty(selectedDate),
+                timePretty: formatTimePretty(selectedTime),
+              })}`
+            : null,
         },
       };
       res.status(201).json(payload);
@@ -232,39 +259,28 @@ export function invitationRouter(repo: InvitationRepository): Router {
     res.send(ics);
   });
 
-  /** Keepsake PDF download for a stored invitation. */
-  router.get("/:id/pdf", (req: Request, res: Response) => {
-    const id = req.params.id ?? "";
-    void repo
-      .findById(id)
-      .then(async (invitation) => {
-        if (!invitation) {
-          res.status(404).send("Not found");
-          return;
-        }
-        const pdfActivity = invitation.activityId
-          ? ACTIVITY_OPTIONS.find((a) => a.id === invitation.activityId) ?? null
-          : null;
-        const pdf = await buildInvitationPdf({
-          datePretty: formatPretty(invitation.selectedDate),
-          timePretty: formatTimePretty(invitation.selectedTime),
-          activityName: pdfActivity?.name ?? null,
-          activityPlace: pdfActivity?.place ?? null,
-          pickedFlowers: invitation.pickedFlowers,
-        });
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader(
-          "Content-Disposition",
-          `attachment; filename="sakshi-and-roshan-invitation.pdf"`,
-        );
-        res.send(Buffer.from(pdf));
-      })
-      .catch((err) => {
-        console.error("[invitation] pdf error:", err);
-        if (!res.headersSent) {
-          res.status(500).send("Could not build the invitation PDF.");
-        }
-      });
+  /**
+   * Keepsake PDF from a stateless signed token — no database involved, so
+   * the link keeps working across restarts, deploys, and cold starts.
+   */
+  router.get("/pdf/:token", async (req: Request, res: Response) => {
+    const input = await parsePdfToken(req.params.token ?? "");
+    if (!input) {
+      res.status(404).send("This invitation link is not valid.");
+      return;
+    }
+    try {
+      const pdf = await buildInvitationPdf(input);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="sakshi-and-roshan-invitation.pdf"`,
+      );
+      res.send(Buffer.from(pdf));
+    } catch (err) {
+      console.error("[invitation] pdf error:", err);
+      res.status(500).send("Could not build the invitation PDF.");
+    }
   });
 
   return router;

@@ -25,6 +25,11 @@ export const env = {
     from: process.env.EMAIL_FROM ?? "Roshan's website <onboarding@resend.dev>",
     resendApiKey: process.env.RESEND_API_KEY ?? "",
   },
+  /** Secret used to sign stateless keepsake-PDF links (HMAC-SHA256). */
+  pdfLinkSecret:
+    process.env.PDF_LINK_SECRET ??
+    process.env.RESEND_API_KEY ??
+    "dateinvitation-dev-secret",
   mongodbUri: process.env.MONGODB_URI ?? "",
 };
 

@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import type { DateInvitationDTO } from "@shared/invitation.types";
 import { COPY, FEATURES, WHATSAPP, getActivityOption } from "@shared/invitation.config";
-import { fetchGoogleStatus } from "../api/invitationApi";
 import { Bouquet, type PickedFlower } from "../components/Bouquet";
 import { FlowerCluster, HeartDivider, PetalBurst } from "../components/Decorations";
 import { HeartDoodle } from "../components/botanicals";
@@ -50,11 +49,6 @@ function CharacterDuo() {
   );
 }
 
-type GoogleState =
-  | { kind: "loading" }
-  | { kind: "ready"; authorized: boolean }
-  | { kind: "error"; message: string };
-
 export function FinalScreen({
   result,
   selectedDate,
@@ -70,33 +64,12 @@ export function FinalScreen({
 }) {
   const activity = selectedActivityId ? getActivityOption(selectedActivityId) : null;
   const [burst, setBurst] = useState(true);
-  const [google, setGoogle] = useState<GoogleState>({ kind: "loading" });
 
   useEffect(() => {
     const t = window.setTimeout(() => setBurst(false), 1600);
     return () => window.clearTimeout(t);
   }, []);
 
-  useEffect(() => {
-    let alive = true;
-    fetchGoogleStatus()
-      .then((s) => {
-        if (alive) setGoogle({ kind: "ready", authorized: s.authorized });
-      })
-      .catch(() => {
-        if (alive)
-          setGoogle({
-            kind: "error",
-            message: "couldn't check the calendar connection",
-          });
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const calendarHref = result?.calendarLink ?? null;
-  const icsHref = result?.icsUrl ?? null;
   const pdfHref = result?.pdfUrl ?? null;
   const whatsappHref =
     FEATURES.whatsapp && WHATSAPP.phone
@@ -127,13 +100,7 @@ export function FinalScreen({
         <div className="mx-auto w-fit">
           <CharacterDuo />
         </div>
-        <p className="hand mt-2 text-2xl text-cherry">
-          {result?.calendarStatus === "success"
-            ? "on the calendar and everything 📅"
-            : google.kind === "ready" && !google.authorized
-              ? "saved on the website 🌸"
-              : null}
-        </p>
+        <p className="hand mt-2 text-2xl text-cherry">saved on the website 🌸</p>
         <h1 id="final-title" className="mt-1 font-serif text-5xl font-semibold text-balance">
           {COPY.final.title}
         </h1>
@@ -157,24 +124,9 @@ export function FinalScreen({
         <p className="hand mt-3 text-xl opacity-85">{COPY.final.ps}</p>
 
         <div className="mt-7 flex flex-col gap-2.5">
-          {FEATURES.googleCalendarLink && calendarHref && (
-            <a
-              className="btn-cherry"
-              href={calendarHref}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {COPY.final.calendar}
-            </a>
-          )}
           {FEATURES.pdfDownload && pdfHref && (
-            <a className="btn-powder" href={pdfHref} download>
+            <a className="btn-cherry" href={pdfHref} download>
               {COPY.final.pdf}
-            </a>
-          )}
-          {FEATURES.icsDownload && icsHref && (
-            <a className="btn-ghost" href={icsHref} download>
-              {COPY.final.ics}
             </a>
           )}
           {whatsappHref && (
@@ -199,15 +151,11 @@ export function FinalScreen({
           </div>
         )}
 
-        {/* honest google status footnote */}
-        <p className="mt-5 text-xs leading-relaxed text-cocoa/70">
-          {google.kind === "loading" && "checking the calendar connection…"}
-          {google.kind === "ready" &&
-            (google.authorized
-              ? "this event was also added to Roshan's google calendar automatically ✓"
-              : "tip: the calendar button above adds it to your calendar in one tap")}
-          {google.kind === "error" && google.message}
-        </p>
+        {result?.emailStatus === "sent" && (
+          <p className="hand mt-4 text-lg text-leaf">
+            a copy is on its way to your inbox 💌
+          </p>
+        )}
       </motion.div>
 
       <HeartDoodle

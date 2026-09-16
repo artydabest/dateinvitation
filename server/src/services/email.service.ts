@@ -8,10 +8,19 @@
  */
 import { env } from "../env.js";
 
+export interface EmailAttachment {
+  /** File name shown in the mail client. */
+  filename: string;
+  /** Raw file bytes. */
+  content: Buffer;
+}
+
 export interface EmailMessage {
   to: string;
   subject: string;
   text: string;
+  /** Optional files to attach (e.g. the keepsake PDF). */
+  attachments?: EmailAttachment[];
 }
 
 export interface EmailProvider {
@@ -29,10 +38,15 @@ const consoleProvider: EmailProvider = {
         `📧 [console email provider] (no real email sent)`,
         `To:      ${msg.to}`,
         `Subject: ${msg.subject}`,
+        msg.attachments?.length
+          ? `Files:   ${msg.attachments.map((a) => `${a.filename} (${a.content.length}b)`).join(", ")}`
+          : null,
         "",
         msg.text,
         "──────────────────────────────────────────────",
-      ].join("\n"),
+      ]
+        .filter((l) => l !== null)
+        .join("\n"),
     );
     return { ok: true, id: `console_${Date.now()}` };
   },
@@ -58,6 +72,14 @@ const resendProvider: EmailProvider = {
           to: [msg.to],
           subject: msg.subject,
           text: msg.text,
+          ...(msg.attachments?.length
+            ? {
+                attachments: msg.attachments.map((a) => ({
+                  filename: a.filename,
+                  content: a.content.toString("base64"),
+                })),
+              }
+            : {}),
         }),
       });
       if (!res.ok) {
