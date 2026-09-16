@@ -190,7 +190,7 @@ async function loadSharp(): Promise<typeof import("sharp") | null> {
   }
 }
 
-/** Read + preprocess asset bytes to a natural aspect at ~2× draw width. */
+/** Read + preprocess asset bytes to a natural aspect at ~3× draw width. */
 async function loadPreprocessedBytes(
   relPath: string,
   targetPx: number,
@@ -205,7 +205,7 @@ async function loadPreprocessedBytes(
     const srcH = meta.height ?? 0;
     if (srcW <= 0 || srcH <= 0) return { bytes: raw, width: 0, height: 0 };
 
-    const width = Math.max(1, Math.min(srcW, Math.ceil(targetPx * 2)));
+    const width = Math.max(1, Math.min(srcW, Math.ceil(targetPx * 3)));
     const height = Math.max(1, Math.round((width * srcH) / srcW));
     const bytes = await sharp(raw)
       .resize(width, height, { fit: "inside" })
@@ -447,7 +447,7 @@ export async function buildInvitationPdf(
     y -= 6;
   }
 
-  /* ── Your bouquet — her flowers gathered like on the landing page ── */
+  /* ── Her bouquet — her flowers gathered into the pink cone ── */
   if (input.pickedFlowers.length > 0) {
     drawCentered(page, spaced("your bouquet"), body, 7.5, y - 6, C.cocoa);
 
@@ -457,7 +457,7 @@ export async function buildInvitationPdf(
     );
     const imgs = new Map<string, PDFImage | null>(
       await Promise.all(
-        types.map(async (t) => [t, await embedArt(doc, FLOWER_FILES[t]!, 40)] as const),
+        types.map(async (t) => [t, await embedArt(doc, FLOWER_FILES[t]!, 44)] as const),
       ),
     );
 
@@ -468,15 +468,23 @@ export async function buildInvitationPdf(
         return img ? [{ img, rotate: 0 }] : [];
       });
 
+    // scale the bunch down when a lower section start leaves less room
+    // above the footer (footer sits at y=46; keep ~18pt clearance)
+    const k = Math.max(0.7, Math.min(1, (y - 64) / 158));
     if (flowers.length > 0) {
-      const flowerCount = flowers.length;
-      drawBouquet(page, flowers, PAGE_W / 2, y - 92, {
-        spread: Math.min(26, 120 / Math.max(flowerCount, 1)),
-        size: 40,
-        tilt: 2.2,
-      });
+      // cone apex near the bottom of the section; the bunch rises above it
+      drawBouquet(page, flowers, PAGE_W / 2, y - 122 * k, k);
     }
-    y -= 150;
+
+    drawCentered(
+      page,
+      "every flower you picked, saved forever",
+      italic,
+      9.5,
+      y - 136 * k,
+      C.cocoa,
+    );
+    y -= 158 * k;
   }
 
   /* ── Footer ── */

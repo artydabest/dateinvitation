@@ -99,12 +99,21 @@ export function TimePicker({
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!svgRef.current) return;
     e.preventDefault();
-    const hand =
-      distOf(e.clientX, e.clientY, svgRef.current) <= HOUR_ZONE ? "hour" : "min";
+    const dist = distOf(e.clientX, e.clientY, svgRef.current);
+    const raw0 = angleOf(e.clientX, e.clientY, svgRef.current);
+    // grabbing the minute hand's body counts as minutes, even inside the
+    // hour zone (the hands often overlap each other's radius)
+    const minDeg = clockRef.current.m * 6;
+    const nearMinHand =
+      dist > 34 &&
+      Math.min(mod(raw0 - minDeg, 360), mod(minDeg - raw0, 360)) <= 16;
+    const hand = dist > HOUR_ZONE || nearMinHand ? "min" : "hour";
     drag.current = {
       hand,
-      lastRaw: angleOf(e.clientX, e.clientY, svgRef.current),
-      acc: (clockRef.current.h % 12) * 30,
+      lastRaw: raw0,
+      // the accumulator starts at the dragged hand's current angle, so any
+      // drag delta immediately moves it (no dead zone around ticks)
+      acc: hand === "min" ? clockRef.current.m * 6 : (clockRef.current.h % 12) * 30,
     };
     if (hand === "hour") parity.current = 0; // each drag counts its own turns
     svgRef.current.setPointerCapture(e.pointerId);
@@ -116,7 +125,15 @@ export function TimePicker({
     const raw = angleOf(e.clientX, e.clientY, svgRef.current);
 
     if (drag.current.hand === "min") {
-      const m = mod(Math.round(raw / 30) * 5, 60);
+      // accumulate the drag delta, then snap the ACCUMULATED angle to the
+      // nearest 5-minute step — the hand follows every movement instead of
+      // ignoring small drags near a tick
+      let d = raw - drag.current.lastRaw;
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      drag.current.lastRaw = raw;
+      drag.current.acc += d;
+      const m = mod(Math.round(drag.current.acc / 30) * 5, 60);
       if (m !== clockRef.current.m) set({ m });
       return;
     }

@@ -156,7 +156,7 @@ export function ActivityPicker({
                   transition={{ type: "spring", stiffness: 380, damping: 15 }}
                   aria-hidden="true"
                 >
-                  <FlowerImage type="smallPink" size={22} />
+                  <FlowerImage type="lily" size={22} />
                 </motion.span>
               )}
             </span>

@@ -1,102 +1,117 @@
 /**
- * Bouquet rendering for the keepsake PDF — mirrors the landing page's
- * arrangement (client/src/components/Bouquet.tsx): her picked flowers
- * fanned and overlapping in a loose gathered bunch, stems tucked into a
- * small pastel pink paper cone that sits on top.
+ * Bouquet rendering for the keepsake PDF — a faithful port of the landing
+ * page's bouquet (client/src/components/Bouquet.tsx):
  *
- * No wrap photo, no Jimp pixel passes — just the flower PNGs (embedded
- * once per type, resized per draw size via the cache in
- * invitationPdf.service) and a few translucent vector folds.
+ *  • flowers are placed in the same fixed cluster slots (BOUQUET_SLOTS),
+ *    overlapping in a gathered bunch around the cone axis — later slots
+ *    draw on top, exactly like the DOM stacking on the web;
+ *  • the pastel pink paper cone (.bq-wrap — blush gradient, apex pointing
+ *    DOWN) is drawn LAST, ON TOP, so its wide mouth covers the stems.
+ *
+ * Coordinates mirror the web component 1:1 (px → pt via scale `k`):
+ *  - flower bottoms sit STEM_Y − slot.y above the cone's apex;
+ *  - the cone is 46 × 54 with its mouth at the top.
  */
 import type { PDFImage, PDFPage } from "pdf-lib";
-import { rgb, degrees } from "pdf-lib";
+import { degrees, rgb } from "pdf-lib";
 
-/* ── The site's pastel pink, sampled from the .bq-wrap cone in index.css
- *    (linear-gradient(160deg, #f6d7dd → #f3c4cd → #e9aebc)) ── */
+/* ── .bq-wrap gradient colors (index.css: #f6d7dd → #f3c4cd → #e9aebc) ── */
 const CONE = {
-  deep: rgb(0.914, 0.682, 0.737), // #e9aebc — inner shadow fold
-  base: rgb(0.965, 0.843, 0.867), // #f6d7dd — main body
-  light: rgb(0.996, 0.914, 0.929), // #fee9ed — lit fold
+  base: rgb(0.953, 0.769, 0.804), // #f3c4cd — mid of the gradient
+  deep: rgb(0.914, 0.682, 0.737), // #e9aebc — dark end (bottom/right)
+  light: rgb(0.965, 0.843, 0.867), // #f6d7dd — light end (top/left)
 };
 
-/** Draw the small pink paper cone (the landing page's .bq-wrap). */
-function drawPinkCone(page: PDFPage, cx: number, apexY: number, height: number) {
-  // drawSvgPath flips y (SVG +y renders upward), so negative y = down the page.
-  const halfTop = height * 0.42;
+/**
+ * Overlapping arrangement slots — fanned up and out from the cone's
+ * center axis (x/y offsets from the cone axis, s = size scale, r = tilt).
+ * Copied verbatim from BOUQUET_SLOTS in Bouquet.tsx.
+ */
+const BOUQUET_SLOTS = [
+  { x: 0, y: -34, s: 0.95, r: -14 },
+  { x: -24, y: -22, s: 0.9, r: 12 },
+  { x: 24, y: -24, s: 0.88, r: -8 },
+  { x: -10, y: -44, s: 0.8, r: 6 },
+  { x: 14, y: -40, s: 0.78, r: -18 },
+  { x: -32, y: -30, s: 0.72, r: 20 },
+  { x: 32, y: -32, s: 0.7, r: 10 },
+  { x: 4, y: -20, s: 0.68, r: -4 },
+  { x: -18, y: -8, s: 0.62, r: 16 },
+  { x: 20, y: -10, s: 0.6, r: -12 },
+  { x: -36, y: -14, s: 0.58, r: 24 },
+  { x: 36, y: -16, s: 0.56, r: -22 },
+] as const;
 
-  // back sheet — slightly taller and wider, peeking behind the front fold
-  page.drawSvgPath(
-    `M 0 0 L ${-halfTop * 0.86} ${-height * 1.12} L ${halfTop * 1.1} ${-height * 1.04} Z`,
-    {
-      x: cx,
-      y: apexY,
-      color: CONE.base,
-      opacity: 0.92,
-      borderColor: CONE.base,
-      borderWidth: 0.5,
-      borderOpacity: 0.9,
-    },
-  );
+/** Flower size before slot scale (pt, matches web's 56px × ~0.78 print scale). */
+const FLOWER_PT = 44;
+/** Where flower stems tuck into the cone (pt above the cone apex, web: 30px). */
+const STEM_Y = 30;
 
-  // main front fold — the triangle you see on the landing page
-  page.drawSvgPath(`M 0 0 L ${-halfTop} ${-height} L ${halfTop} ${-height} Z`, {
+/** The .bq-wrap cone: apex pointing DOWN, wide mouth at the top. */
+function drawPinkCone(page: PDFPage, cx: number, apexY: number, k: number) {
+  const w = 46 * k; // web: 46px wide
+  const h = 54 * k; // web: 54px tall
+  const hw = w / 2;
+
+  // main triangle: mouth at the top (apexY + h), apex at the bottom (apexY)
+  page.drawSvgPath(`M 0 0 L ${-hw} ${-h} L ${hw} ${-h} Z`, {
     x: cx,
     y: apexY,
     color: CONE.base,
-    opacity: 0.95,
+    opacity: 0.97,
     borderColor: CONE.deep,
-    borderWidth: 0.6,
-    borderOpacity: 0.55,
+    borderWidth: 0.5,
+    borderOpacity: 0.4,
   });
 
-  // lit fold — a sheen on the left face
-  page.drawSvgPath(`M 0 0 L ${-halfTop * 0.9} ${-height} L ${-halfTop * 0.28} ${-height * 0.82} Z`, {
-    x: cx,
-    y: apexY,
-    color: CONE.light,
-    opacity: 0.85,
-  });
-
-  // shadow fold — right face
-  page.drawSvgPath(`M 0 0 L ${halfTop * 0.3} ${-height * 0.86} L ${halfTop * 0.96} ${-height * 0.98} Z`, {
+  // darker right face — approximates the 160° gradient's dark end
+  page.drawSvgPath(`M 0 0 L ${hw} ${-h} L ${hw * 0.2} ${-h * 0.55} Z`, {
     x: cx,
     y: apexY,
     color: CONE.deep,
-    opacity: 0.4,
+    opacity: 0.5,
+  });
+
+  // lighter left face — the gradient's light end
+  page.drawSvgPath(`M 0 0 L ${-hw} ${-h} L ${-hw * 0.25} ${-h * 0.6} Z`, {
+    x: cx,
+    y: apexY,
+    color: CONE.light,
+    opacity: 0.6,
   });
 }
 
 /**
- * Draw her bouquet like the landing page: flowers fanned and overlapping
- * around the cone axis (outermost first so center flowers layer on top),
- * with the small pink cone drawn last so its mouth covers the stems.
+ * Draw her bouquet exactly like the landing page: flowers clustered in the
+ * fixed slots, then the pink cone drawn ON TOP covering the stems.
  *
- * `cx` is the cone's center axis; `baseY` is where the cone's apex sits.
+ * `cx` is the cone's center axis; `baseY` is the cone's apex (bottom).
  */
 export function drawBouquet(
   page: PDFPage,
   flowers: { img: PDFImage; rotate: number }[],
   cx: number,
   baseY: number,
-  layout: { spread: number; size: number; tilt: number },
+  k = 1,
 ) {
-  // flowers: outermost first so center flowers layer on top
-  const ordered = flowers
-    .map((f, i) => ({ ...f, i }))
-    .sort(
-      (a, b) =>
-        Math.abs(b.i - (flowers.length - 1) / 2) -
-        Math.abs(a.i - (flowers.length - 1) / 2),
-    );
-  for (const { img, rotate, i } of ordered) {
-    const offset = i - (flowers.length - 1) / 2;
-    const w = layout.size * (1 - Math.abs(offset) * 0.09);
-    const h = (img.height / img.width) * w;
-    const x = cx + offset * layout.spread - w / 2;
-    const y = baseY - 10 + (1 - Math.abs(offset) / Math.max(flowers.length, 1)) * 14;
-    page.drawImage(img, { x, y, width: w, height: h, rotate: degrees(rotate + offset * layout.tilt) });
+  // DOM order: later slots stack on top (no re-ordering — that's the web look)
+  for (const [i, f] of flowers.slice(0, BOUQUET_SLOTS.length).entries()) {
+    const slot = BOUQUET_SLOTS[i]!;
+    const w = FLOWER_PT * slot.s * k;
+    const h = (f.img.height / f.img.width) * w;
+    // flower's bottom edge sits STEM_Y − slot.y above the apex (web: bottom:
+    // STEM_Y, then translated up by −slot.y)
+    const x = cx + slot.x * k - w / 2;
+    const y = baseY + (STEM_Y - slot.y) * k;
+    page.drawImage(f.img, {
+      x,
+      y,
+      width: w,
+      height: h,
+      rotate: degrees(slot.r),
+    });
   }
 
-  // the cone wrap, ON TOP — its mouth covers the stems (like .bq-wrap)
-  drawPinkCone(page, cx, baseY, layout.size * 0.78);
+  // the cone wrap, ON TOP — its wide mouth covers the stems (like .bq-wrap)
+  drawPinkCone(page, cx, baseY, k);
 }
