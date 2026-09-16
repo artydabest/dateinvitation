@@ -1,0 +1,29 @@
+# Render Blueprint — deploy the whole site as one Node web service.
+# The Express server builds and serves the Vite client (client/dist),
+# so no separate static hosting is needed.
+#
+# Deploy: Render Dashboard → New → Blueprint → pick this repo,
+# or push this file and "Apply" from the repo's Render page.
+
+services:
+  - type: web
+    name: dateinvitation
+    runtime: node
+    plan: free
+    # Render builds from the repo root (workspaces hoist deps there).
+    buildCommand: npm install && npm run build:all
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      # Render sets NODE_ENV and PORT automatically.
+      - key: CLIENT_URL
+        # Allowed CORS origin — Render injects the service's own URL here.
+        value: https://dateinvitation.onrender.com
+      - key: EMAIL_PROVIDER
+        value: console
+      # ── Optional: add these in the Render dashboard (Environment tab) ──
+      # MONGODB_URI        — free tier of mongodb.com/atlas keeps RSVPs across restarts
+      # EMAIL_PROVIDER     — set to "resend" + RESEND_API_KEY for real emails
+      # EMAIL_FROM
+      # GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI
+      #   (redirect URI must be https://dateinvitation.onrender.com/api/google/callback)
