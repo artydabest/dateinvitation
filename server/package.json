@@ -16,6 +16,7 @@
     "express-rate-limit": "^7.4.1",
     "googleapis": "^144.0.0",
     "helmet": "^8.0.0",
+    "jimp": "^0.22.12",
     "mongoose": "^8.8.0",
     "pdf-lib": "^1.17.1"
   },

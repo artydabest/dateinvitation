@@ -23,6 +23,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { serverRoot } from "../paths.js";
 import { env } from "../env.js";
+import { loadBouquetWrapImage, drawBouquet } from "./bouquetArt.service.js";
 import {
   ACTIVITY_OPTIONS,
 } from "../../../shared/invitation.config.js";
@@ -370,7 +371,7 @@ export async function buildInvitationPdf(
     y -= 6;
   }
 
-  /* ── Her bouquet — the flowers she picked, fanned and tied ── */
+  /* ── Your bouquet — her flowers tucked into a tissue wrap ── */
   if (input.pickedFlowers.length > 0) {
     drawCentered(page, spaced("your bouquet"), body, 7.5, y - 6, C.cocoa);
 
@@ -384,49 +385,32 @@ export async function buildInvitationPdf(
       ),
     );
 
-    // fan them out: center flower highest, alternating sides, slight tilt
-    const flowers = input.pickedFlowers.slice(0, 12);
-    const cx = PAGE_W / 2;
-    const baseY = y - 92;
-    const gap = Math.min(26, 120 / Math.max(flowers.length, 1));
-    // draw outer flowers first so the center ones sit on top
-    const order = flowers
-      .map((f, i) => ({ f, i }))
-      .sort((a, b) => Math.abs(a.i - (flowers.length - 1) / 2) * -1 - Math.abs(b.i - (flowers.length - 1) / 2) * -1)
-      .map((o) => o.i)
-      .reverse();
-    for (const i of order) {
-      const f = flowers[i]!;
-      const img = imgs.get(f.type);
-      if (!img) continue;
-      const offset = i - (flowers.length - 1) / 2;
-      const w = 40 - Math.abs(offset) * 3.5;
-      const fx = cx + offset * gap - w / 2;
-      const fy = baseY + 14 - Math.abs(offset) * 4.5;
-      const h = (img.height / img.width) * w;
-      page.drawImage(img, {
-        x: fx,
-        y: fy,
-        width: w,
-        height: h,
-        rotate: degrees(offset * 2.2),
+    const wrap = await loadBouquetWrapImage(doc);
+    const flowers = input.pickedFlowers
+      .slice(0, 12)
+      .flatMap((f) => {
+        const img = imgs.get(f.type);
+        return img ? [{ img, rotate: 0 }] : [];
+      });
+
+    if (flowers.length > 0) {
+      const flowerCount = flowers.length;
+      drawBouquet(page, wrap, flowers, PAGE_W / 2, y - 96, {
+        spread: Math.min(26, 120 / Math.max(flowerCount, 1)),
+        size: 40,
+        tilt: 2.2,
       });
     }
-
-    // a little leaf bow under the fan
-    page.drawCircle({ x: cx - 5, y: baseY + 4, size: 4.5, color: C.leaf });
-    page.drawCircle({ x: cx + 5, y: baseY + 4, size: 4.5, color: C.leaf });
-    page.drawCircle({ x: cx, y: baseY + 6, size: 3, color: C.leaf });
 
     drawCentered(
       page,
       "every flower you picked, saved forever",
       italic,
       9.5,
-      baseY - 14,
+      y - 148,
       C.cocoa,
     );
-    y = baseY - 34;
+    y -= 168;
   }
 
   /* ── Footer ── */
