@@ -17,8 +17,8 @@ services:
     envVars:
       # Render sets NODE_ENV and PORT automatically.
       - key: CLIENT_URL
-        # Allowed CORS origin — Render injects the service's own URL here.
-        value: https://dateinvitation.onrender.com
+        # Allowed CORS origin — this service's public URL.
+        value: https://dateinvitation-bpsg.onrender.com
       - key: EMAIL_PROVIDER
         value: console
       # ── Optional: add these in the Render dashboard (Environment tab) ──
@@ -26,4 +26,4 @@ services:
       # EMAIL_PROVIDER     — set to "resend" + RESEND_API_KEY for real emails
       # EMAIL_FROM
       # GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI
-      #   (redirect URI must be https://dateinvitation.onrender.com/api/google/callback)
+      #   (redirect URI must be https://dateinvitation-bpsg.onrender.com/api/google/callback)
