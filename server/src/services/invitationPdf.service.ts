@@ -401,16 +401,7 @@ export async function buildInvitationPdf(
         tilt: 2.2,
       });
     }
-
-    drawCentered(
-      page,
-      "every flower you picked, saved forever",
-      italic,
-      9.5,
-      y - 148,
-      C.cocoa,
-    );
-    y -= 168;
+    y -= 150;
   }
 
   /* ── Footer ── */
