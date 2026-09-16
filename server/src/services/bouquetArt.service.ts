@@ -1,136 +1,85 @@
 /**
- * Bouquet rendering for the keepsake PDF.
+ * Bouquet rendering for the keepsake PDF — mirrors the landing page's
+ * arrangement (client/src/components/Bouquet.tsx): her picked flowers
+ * fanned and overlapping in a loose gathered bunch, stems tucked into a
+ * small pastel pink paper cone that sits on top.
  *
- * Two ways to draw the wrap under her flowers:
- *  1. If `client/public/assets/bouquet-wrap.png` exists, it is used directly
- *     (white pixels become transparent so it composites on the card).
- *  2. Otherwise a vector "navy tissue cone" inspired by the reference photo
- *     is drawn: layered translucent folds in the same steel blue.
- *
- * Her picked flowers fan above the wrap either way, tucked behind its rim.
+ * No wrap photo, no Jimp pixel passes — just the flower PNGs (embedded
+ * once per type, resized per draw size via the cache in
+ * invitationPdf.service) and a few translucent vector folds.
  */
-import type { PDFDocument, PDFImage, PDFPage } from "pdf-lib";
+import type { PDFImage, PDFPage } from "pdf-lib";
 import { rgb, degrees } from "pdf-lib";
-import Jimp from "jimp";
-import fsp from "node:fs/promises";
-import path from "node:path";
-import { serverRoot } from "../paths.js";
 
-/* ── Blues sampled from the reference tissue photo ── */
-const TISSUE = {
-  deep: rgb(0.157, 0.267, 0.431), // #28446e — inner shadow fold
-  base: rgb(0.255, 0.365, 0.537), // #415d89 — main body
-  mid: rgb(0.353, 0.463, 0.627), // #5a76a0 — lit fold
-  light: rgb(0.494, 0.588, 0.729), // #7e96ba — bright rim
+/* ── The site's pastel pink, sampled from the .bq-wrap cone in index.css
+ *    (linear-gradient(160deg, #f6d7dd → #f3c4cd → #e9aebc)) ── */
+const CONE = {
+  deep: rgb(0.914, 0.682, 0.737), // #e9aebc — inner shadow fold
+  base: rgb(0.965, 0.843, 0.867), // #f6d7dd — main body
+  light: rgb(0.996, 0.914, 0.929), // #fee9ed — lit fold
 };
 
-function clientAssetPath(relPath: string): string {
-  return path.join(serverRoot, "../client/public", relPath.replace(/^\/+/, ""));
-}
+/** Draw the small pink paper cone (the landing page's .bq-wrap). */
+function drawPinkCone(page: PDFPage, cx: number, apexY: number, height: number) {
+  // drawSvgPath flips y (SVG +y renders upward), so negative y = down the page.
+  const halfTop = height * 0.42;
 
-/**
- * Load the optional custom wrap image with a white→alpha key applied.
- * Returns null when the file is absent or unreadable (fallback kicks in).
- */
-export async function loadBouquetWrapImage(
-  doc: PDFDocument,
-): Promise<PDFImage | null> {
-  try {
-    const bytes = await fsp.readFile(clientAssetPath("/assets/bouquet-wrap.png"));
-    const img = await Jimp.read(bytes);
-    const w = img.bitmap.width;
-    const h = img.bitmap.height;
-    // simple luminance key: near-white → transparent
-    img.scan(0, 0, w, h, function (this: Jimp, x: number, y: number, idx: number) {
-      const r = this.bitmap.data[idx]!;
-      const g = this.bitmap.data[idx + 1]!;
-      const b = this.bitmap.data[idx + 2]!;
-      const lum = (r + g + b) / 3;
-      if (lum > 242) {
-        this.bitmap.data[idx + 3] = 0;
-      } else if (lum > 200) {
-        // feather the edge so cut-out doesn't look jaggy
-        this.bitmap.data[idx + 3] = Math.round(255 * ((242 - lum) / 42));
-      }
-    });
-    const keyed = await img.getBufferAsync("image/png");
-    return doc.embedPng(keyed);
-  } catch {
-    return null;
-  }
-}
-
-/** Draw the vector fallback: a fan of translucent tissue folds. */
-function drawTissueCone(page: PDFPage, cx: number, topY: number, size: number) {
-  // back layer — the taller sheets peeking behind
-  const fold = (
-    angleDeg: number,
-    length: number,
-    halfWidthDeg: number,
-    color: ReturnType<typeof rgb>,
-    opacity: number,
-  ) => {
-    const a = degrees(angleDeg - halfWidthDeg).angle;
-    const b = degrees(angleDeg + halfWidthDeg).angle;
-    const x1 = cx + Math.cos(a) * length;
-    const y1 = topY + Math.sin(a) * length;
-    const x2 = cx + Math.cos(b) * length;
-    const y2 = topY + Math.sin(b) * length;
-    page.drawSvgPath(`M ${cx} ${topY} L ${x1} ${y1} L ${x2} ${y2} Z`, {
-      x: 0,
-      y: 0,
-      scale: 1,
-      color,
-      opacity,
-      borderColor: color,
-      borderWidth: 0.5,
-      borderOpacity: opacity * 0.9,
-    });
-  };
-
-  // outermost, darkest first; pdf-lib y grows upward so fan spans ~-10°..190°
-  fold(28, size * 1.02, 11, TISSUE.deep, 0.95);
-  fold(62, size * 1.06, 10, TISSUE.deep, 0.9);
-  fold(152, size * 1.02, 11, TISSUE.deep, 0.95);
-  fold(118, size * 1.06, 10, TISSUE.deep, 0.9);
-
-  fold(45, size * 1.0, 12, TISSUE.base, 0.98);
-  fold(90, size * 1.08, 12, TISSUE.base, 0.98);
-  fold(135, size * 1.0, 12, TISSUE.base, 0.98);
-
-  fold(70, size * 0.92, 9, TISSUE.mid, 0.95);
-  fold(110, size * 0.92, 9, TISSUE.mid, 0.95);
-
-  // inner sheen
-  fold(88, size * 0.7, 8, TISSUE.light, 0.8);
-
-  // cone pinch at the bottom
+  // back sheet — slightly taller and wider, peeking behind the front fold
   page.drawSvgPath(
-    `M ${cx - size * 0.16} ${topY - size * 0.12} L ${cx} ${topY - size * 0.3} L ${cx + size * 0.16} ${topY - size * 0.12} Z`,
-    { x: 0, y: 0, scale: 1, color: TISSUE.deep, opacity: 0.95 },
+    `M 0 0 L ${-halfTop * 0.86} ${-height * 1.12} L ${halfTop * 1.1} ${-height * 1.04} Z`,
+    {
+      x: cx,
+      y: apexY,
+      color: CONE.base,
+      opacity: 0.92,
+      borderColor: CONE.base,
+      borderWidth: 0.5,
+      borderOpacity: 0.9,
+    },
   );
+
+  // main front fold — the triangle you see on the landing page
+  page.drawSvgPath(`M 0 0 L ${-halfTop} ${-height} L ${halfTop} ${-height} Z`, {
+    x: cx,
+    y: apexY,
+    color: CONE.base,
+    opacity: 0.95,
+    borderColor: CONE.deep,
+    borderWidth: 0.6,
+    borderOpacity: 0.55,
+  });
+
+  // lit fold — a sheen on the left face
+  page.drawSvgPath(`M 0 0 L ${-halfTop * 0.9} ${-height} L ${-halfTop * 0.28} ${-height * 0.82} Z`, {
+    x: cx,
+    y: apexY,
+    color: CONE.light,
+    opacity: 0.85,
+  });
+
+  // shadow fold — right face
+  page.drawSvgPath(`M 0 0 L ${halfTop * 0.3} ${-height * 0.86} L ${halfTop * 0.96} ${-height * 0.98} Z`, {
+    x: cx,
+    y: apexY,
+    color: CONE.deep,
+    opacity: 0.4,
+  });
 }
 
 /**
- * Draw her bouquet: custom wrap image (or vector cone), flowers fanned
- * above it, tucked behind the rim.
+ * Draw her bouquet like the landing page: flowers fanned and overlapping
+ * around the cone axis (outermost first so center flowers layer on top),
+ * with the small pink cone drawn last so its mouth covers the stems.
+ *
+ * `cx` is the cone's center axis; `baseY` is where the cone's apex sits.
  */
 export function drawBouquet(
   page: PDFPage,
-  wrap: PDFImage | null,
   flowers: { img: PDFImage; rotate: number }[],
   cx: number,
   baseY: number,
   layout: { spread: number; size: number; tilt: number },
 ) {
-  if (wrap) {
-    const h = (wrap.height / wrap.width) * layout.size * 1.15;
-    const w = layout.size * 1.15;
-    page.drawImage(wrap, { x: cx - w / 2, y: baseY - h * 0.62, width: w, height: h });
-  } else {
-    drawTissueCone(page, cx, baseY + 18, layout.size * 0.9);
-  }
-
   // flowers: outermost first so center flowers layer on top
   const ordered = flowers
     .map((f, i) => ({ ...f, i }))
@@ -144,7 +93,10 @@ export function drawBouquet(
     const w = layout.size * (1 - Math.abs(offset) * 0.09);
     const h = (img.height / img.width) * w;
     const x = cx + offset * layout.spread - w / 2;
-    const y = baseY + 10 + (1 - Math.abs(offset) / Math.max(flowers.length, 1)) * 14;
+    const y = baseY - 10 + (1 - Math.abs(offset) / Math.max(flowers.length, 1)) * 14;
     page.drawImage(img, { x, y, width: w, height: h, rotate: degrees(rotate + offset * layout.tilt) });
   }
+
+  // the cone wrap, ON TOP — its mouth covers the stems (like .bq-wrap)
+  drawPinkCone(page, cx, baseY, layout.size * 0.78);
 }

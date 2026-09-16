@@ -6,8 +6,9 @@
  * Emoji is deliberately avoided in text: standard PDF fonts are WinAnsi-only.
  * The personality comes from embedded art + drawn shapes instead.
  *
- * Art is embedded at full resolution — no downscaling — so the keepsake
- * stays crisp when zoomed or printed. Larger file, worth it.
+ * Art is embedded once per (file, pixel-size) pair and cached across
+ * requests — the stock PNGs are huge, and re-encoding them on every
+ * download was what made this endpoint crawl.
  */
 import {
   PDFDocument,
@@ -23,7 +24,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { serverRoot } from "../paths.js";
 import { env } from "../env.js";
-import { loadBouquetWrapImage, drawBouquet } from "./bouquetArt.service.js";
+import { drawBouquet } from "./bouquetArt.service.js";
 import {
   ACTIVITY_OPTIONS,
 } from "../../../shared/invitation.config.js";
@@ -164,17 +165,79 @@ function clientAssetPath(relPath: string): string {
   return path.join(serverRoot, "../client/public", relPath.replace(/^\/+/, ""));
 }
 
-/** Embed a PNG at full resolution; null if missing/corrupt. */
-async function embedBestEffort(
-  doc: PDFDocument,
-  relPath: string,
-): Promise<PDFImage | null> {
+/* ── Embedded-art cache ──────────────────────────────────────────────────
+ * Embedding a PNG decodes + re-encodes every pixel, and the stock flower
+ * art is 0.3–2 MP per file. Doing that on every PDF request is seconds of
+ * CPU — so each (file, draw-width) pair is embedded exactly once, resized
+ * to its draw size, and reused by every later request. Two graceful
+ * degenerations: if the sharp preprocessor is unavailable we embed the
+ * original bytes (crisp, just bigger); if a file is missing we skip it.
+ * ──────────────────────────────────────────────────────────────────── */
+
+/** One entry per embedded art image for this process. */
+const artCache = new Map<string, PDFImage>();
+
+/** Best-effort sharp import; sharp is optional so deploys stay light. */
+async function loadSharp(): Promise<typeof import("sharp") | null> {
   try {
-    const bytes = await fsp.readFile(clientAssetPath(relPath));
-    return await doc.embedPng(bytes);
+    // CJS interop: the callable factory can sit on .default or the namespace
+    const mod = (await import("sharp")) as unknown as {
+      default?: typeof import("sharp");
+    };
+    return mod.default ?? (mod as unknown as typeof import("sharp"));
   } catch {
     return null;
   }
+}
+
+/** Read + preprocess asset bytes to a natural aspect at ~2× draw width. */
+async function loadPreprocessedBytes(
+  relPath: string,
+  targetPx: number,
+): Promise<{ bytes: Buffer; width: number; height: number } | null> {
+  try {
+    const raw = await fsp.readFile(clientAssetPath(relPath));
+    const sharp = await loadSharp();
+    if (!sharp) return { bytes: raw, width: 0, height: 0 };
+
+    const meta = await sharp(raw).metadata();
+    const srcW = meta.width ?? 0;
+    const srcH = meta.height ?? 0;
+    if (srcW <= 0 || srcH <= 0) return { bytes: raw, width: 0, height: 0 };
+
+    const width = Math.max(1, Math.min(srcW, Math.ceil(targetPx * 2)));
+    const height = Math.max(1, Math.round((width * srcH) / srcW));
+    const bytes = await sharp(raw)
+      .resize(width, height, { fit: "inside" })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    return { bytes, width, height };
+  } catch {
+    return null;
+  }
+}
+
+/** Embed an asset at draw width `w` (cached per file+size); null if missing. */
+async function embedArt(
+  doc: PDFDocument,
+  relPath: string,
+  w: number,
+): Promise<PDFImage | null> {
+  const key = `${relPath}@${Math.round(w)}`;
+  const hit = artCache.get(key);
+  if (hit) return hit;
+
+  const prepared = await loadPreprocessedBytes(relPath, w);
+  if (!prepared) return null;
+
+  let img: PDFImage;
+  try {
+    img = await doc.embedPng(prepared.bytes);
+  } catch {
+    return null;
+  }
+  artCache.set(key, img);
+  return img;
 }
 
 /** Centered text helper. */
@@ -253,10 +316,23 @@ function drawPanel(
   });
 }
 
+/** Finished PDFs per exact input — repeat downloads skip the rebuild. */
+const pdfCache = new Map<string, Uint8Array>();
+
 /** Build the full keepsake PDF bytes. */
 export async function buildInvitationPdf(
   input: KeepsakeInput,
 ): Promise<Uint8Array> {
+  const cacheKey = [
+    input.datePretty,
+    input.timePretty,
+    input.activityName ?? "",
+    input.activityPlace ?? "",
+    input.pickedFlowers.map((f) => f.type).join(","),
+  ].join("|");
+  const cached = pdfCache.get(cacheKey);
+  if (cached) return cached;
+
   const doc = await PDFDocument.create();
   doc.setTitle("It's a date — the invitation");
   doc.setSubject("A very important appointment");
@@ -301,13 +377,13 @@ export async function buildInvitationPdf(
     opacity: 0.85,
   });
 
-  /* ── Static art (downscaled to print size; missing files are skipped) ── */
+  /* ── Static art (embedded once per size, resized; missing files skipped) ── */
   const [sunflower, lily, smallPink, pom, kuromi] = await Promise.all([
-    embedBestEffort(doc, "/assets/flowers/sunflower.png"),
-    embedBestEffort(doc, "/assets/flowers/lily.png"),
-    embedBestEffort(doc, "/assets/flowers/small-pink.png"),
-    embedBestEffort(doc, "/assets/characters/pompompurin.png"),
-    embedBestEffort(doc, "/assets/characters/kuromi.png"),
+    embedArt(doc, "/assets/flowers/sunflower.png", ART_DRAW_WIDTHS.sunflower),
+    embedArt(doc, "/assets/flowers/lily.png", ART_DRAW_WIDTHS.lily),
+    embedArt(doc, "/assets/flowers/small-pink.png", ART_DRAW_WIDTHS.smallPink),
+    embedArt(doc, "/assets/characters/pompompurin.png", ART_DRAW_WIDTHS.pom),
+    embedArt(doc, "/assets/characters/kuromi.png", ART_DRAW_WIDTHS.kuromi),
   ]);
 
   const drawImg = (
@@ -371,21 +447,20 @@ export async function buildInvitationPdf(
     y -= 6;
   }
 
-  /* ── Your bouquet — her flowers tucked into a tissue wrap ── */
+  /* ── Your bouquet — her flowers gathered like on the landing page ── */
   if (input.pickedFlowers.length > 0) {
     drawCentered(page, spaced("your bouquet"), body, 7.5, y - 6, C.cocoa);
 
-    // embed one image per distinct flower type she picked (best effort)
+    // embed one image per distinct flower type she picked (cached per size)
     const types = [...new Set(input.pickedFlowers.map((f) => f.type))].filter(
       (t): t is string => t in FLOWER_FILES,
     );
     const imgs = new Map<string, PDFImage | null>(
       await Promise.all(
-        types.map(async (t) => [t, await embedBestEffort(doc, FLOWER_FILES[t]!)] as const),
+        types.map(async (t) => [t, await embedArt(doc, FLOWER_FILES[t]!, 40)] as const),
       ),
     );
 
-    const wrap = await loadBouquetWrapImage(doc);
     const flowers = input.pickedFlowers
       .slice(0, 12)
       .flatMap((f) => {
@@ -395,7 +470,7 @@ export async function buildInvitationPdf(
 
     if (flowers.length > 0) {
       const flowerCount = flowers.length;
-      drawBouquet(page, wrap, flowers, PAGE_W / 2, y - 96, {
+      drawBouquet(page, flowers, PAGE_W / 2, y - 92, {
         spread: Math.min(26, 120 / Math.max(flowerCount, 1)),
         size: 40,
         tilt: 2.2,
@@ -417,5 +492,12 @@ export async function buildInvitationPdf(
   /* ── Folio — like a page number, out in the margin below the frame ── */
   drawCentered(page, "— the first of many —", italic, 8.5, 22, C.cocoa);
 
-  return doc.save();
+  const bytes = await doc.save();
+
+  pdfCache.set(cacheKey, bytes);
+  if (pdfCache.size > 32) {
+    // drop the oldest (Map iterates in insertion order)
+    pdfCache.delete(pdfCache.keys().next().value!);
+  }
+  return bytes;
 }
