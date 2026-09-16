@@ -165,17 +165,22 @@ function clientAssetPath(relPath: string): string {
   return path.join(serverRoot, "../client/public", relPath.replace(/^\/+/, ""));
 }
 
-/* ── Embedded-art cache ──────────────────────────────────────────────────
+/* ── Embedded-art cache ──────────────────────────────────────────────
  * Embedding a PNG decodes + re-encodes every pixel, and the stock flower
  * art is 0.3–2 MP per file. Doing that on every PDF request is seconds of
- * CPU — so each (file, draw-width) pair is embedded exactly once, resized
- * to its draw size, and reused by every later request. Two graceful
- * degenerations: if the sharp preprocessor is unavailable we embed the
- * original bytes (crisp, just bigger); if a file is missing we skip it.
- * ──────────────────────────────────────────────────────────────────── */
+ * CPU — so each (file, draw-width) pair's PREPROCESSED BYTES are cached
+ * and shared across requests. The bytes are re-embedded into each new
+ * PDFDocument — PDFImage objects are document-bound and would silently
+ * draw nothing in a later document. Two graceful degenerations: if the
+ * sharp preprocessor is unavailable we embed the original bytes (crisp,
+ * just bigger); if a file is missing we skip it.
+ * ──────────────────────────────────────────────────────────────── */
 
-/** One entry per embedded art image for this process. */
-const artCache = new Map<string, PDFImage>();
+/** Preprocessed asset bytes per (file, draw width) — shared across docs. */
+const artBytesCache = new Map<
+  string,
+  { bytes: Buffer; width: number; height: number }
+>();
 
 /** Best-effort sharp import; sharp is optional so deploys stay light. */
 async function loadSharp(): Promise<typeof import("sharp") | null> {
@@ -217,27 +222,31 @@ async function loadPreprocessedBytes(
   }
 }
 
-/** Embed an asset at draw width `w` (cached per file+size); null if missing. */
+/** Embed an asset at draw width `w` (bytes cached per file+size); null if missing. */
 async function embedArt(
   doc: PDFDocument,
   relPath: string,
   w: number,
 ): Promise<PDFImage | null> {
   const key = `${relPath}@${Math.round(w)}`;
-  const hit = artCache.get(key);
-  if (hit) return hit;
+  let prepared = artBytesCache.get(key);
+  if (!prepared) {
+    const loaded = await loadPreprocessedBytes(relPath, w);
+    if (!loaded) return null;
+    prepared = loaded;
+    artBytesCache.set(key, prepared);
+    if (artBytesCache.size > 64) {
+      // drop the oldest (Map iterates in insertion order)
+      artBytesCache.delete(artBytesCache.keys().next().value!);
+    }
+  }
 
-  const prepared = await loadPreprocessedBytes(relPath, w);
-  if (!prepared) return null;
-
-  let img: PDFImage;
+  // re-embed per document: PDFImage is bound to the doc that made it
   try {
-    img = await doc.embedPng(prepared.bytes);
+    return await doc.embedPng(prepared.bytes);
   } catch {
     return null;
   }
-  artCache.set(key, img);
-  return img;
 }
 
 /** Centered text helper. */
